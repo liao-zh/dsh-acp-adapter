@@ -80,6 +80,31 @@ git rebase main
 - 该提示自带说明「市场只安装正式版本，不会自动装这些提交」，**忽略即可**。
 - 想根治可把 fork 默认分支改成 `release`，但要先确认 dshmarket 比较的是默认分支而非安装 spec 所在分支。
 
+## 远程装太慢时：改用 tarball
+
+Git 安装要克隆整个仓库（183 个提交、约 13 MB），国内经 SSH 可能等数分钟到更久。
+产物确定、且网络不佳时，改传预打包文件：
+
+```powershell
+# 1. 本地打包（必须在 release 分支，那里有 lib/）
+cd dsh-acp-adapter
+git switch release
+pnpm pack          # 生成 zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz
+git switch custom
+```
+
+```bash
+# 2. 把 tgz 传到远程（WSL 可直接读 /mnt/c/...，或用 scp）
+cp /mnt/c/path/to/zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz ~/
+
+# 3. 装
+dsh plugin --profile <名> add ~/zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz
+```
+
+- **优点**：秒级完成、不依赖网络、产物与本地验证的完全一致。
+- **缺点**：不走 Git，插件市场**不会**出现更新提示；升级要重新传文件并改 spec。
+- `pnpm pack` 依赖 `packageManager: pnpm@10.7.0`，用 12.x 也会自动切换，无需手动降级。
+
 ## 切回上游
 
 上游修好 0.2.2 兼容后：

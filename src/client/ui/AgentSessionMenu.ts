@@ -117,8 +117,8 @@ export function AgentSessionMenu({
       align,
       items,
       listClassName: css.menuList,
-      // Pane heights differ; let native positioning remeasure on each render.
-      getAnchorRect: () => anchor.current?.getBoundingClientRect() ?? null,
+      // 0.2.2 anchors menus to the trigger element through `anchor` and drops
+      // the measured-rectangle callback; the anchor re-measures per render.
       selectedId: group?.choices.find((choice) => choice.current)?.id,
       onClose: () => onOpenChange(false),
       onSelect: (id: string) => {

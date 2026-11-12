@@ -53,6 +53,7 @@ export function AcpAgentControl({
   sessionId,
   useProjection,
   useSession,
+  useSessions,
   useAccess,
   t,
   remote,
@@ -64,7 +65,11 @@ export function AcpAgentControl({
   sessionAccessSource,
 }: AgentControlProps): ReactNode {
   const projection = useProjection('modelSelection')
-  const sessionTitle = useProjection('title')
+  // 0.2.2 removes the `title` projection; the Session list row is the published
+  // title source, so read the current Session's own row instead.
+  const sessionTitle = useSessions((sessions) =>
+    sessionId === undefined ? undefined : sessions.byId[sessionId]?.title,
+  )
   const running = useSession((state) => state.running)
   const optionWriteAllowed = useAccess('dshAcp/setAgentSessionOption')
   const policyWriteAllowed = useAccess('dshAcp/setToolApprovalPolicy')

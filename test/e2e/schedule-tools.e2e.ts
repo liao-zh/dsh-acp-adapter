@@ -1,5 +1,5 @@
 import type {} from '@deepseek-ai/dsh-schedule'
-import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import type {} from '@deepseek-ai/dsh-agent-team'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'

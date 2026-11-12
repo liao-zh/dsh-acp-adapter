@@ -247,7 +247,6 @@ function Loaded({
   const [addMenuSide, setAddMenuSide] = useState<'bottom' | 'top'>('bottom')
   const addAnchorRect = useRef<DOMRect | null>(null)
   const catalogMenuId = `acp-catalog-${useId().replaceAll(':', '')}`
-  const getCatalogAnchorRect = useCallback((): DOMRect | null => addAnchorRect.current, [])
   const onCatalogMeasure = useCallback((rect: DOMRect, side: 'bottom' | 'top', sideChanged: boolean): void => {
     addAnchorRect.current = rect
     if (sideChanged) setAddMenuSide(side)
@@ -413,7 +412,6 @@ function Loaded({
         className: css.addMenu ?? '',
         listClassName: `${css.catalogMenu ?? ''} ${catalogMenuId}`,
         side: addMenuSide,
-        getAnchorRect: getCatalogAnchorRect,
         items: [
           ...(verified.length === 0
             ? []

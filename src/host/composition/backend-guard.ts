@@ -8,6 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
+import { readHostProjectionView } from '../../domain/session/projection-read.ts'
 import { readSessionFacts } from './session-facts.ts'
 import type { AcpSidecar, AcpBindingLookup } from '../../persistence/sidecar.ts'
 import { acpAgentIdFromRoute } from '../../domain/session/agent-config.ts'
@@ -64,7 +65,7 @@ function transitionError(
   message: string,
   cause?: unknown,
 ): LlmError {
-  return new LlmError(message, code, cause instanceof Error ? { cause } : undefined)
+  return LlmError.fromFailure({ message: message, code: code }, cause instanceof Error ? { cause } : undefined)
 }
 
 async function blockWithRecovery(
@@ -104,7 +105,7 @@ export function installAcpBackendGuard(ctx: Context, options: AcpBackendGuardOpt
     projectionCtx.on('agent/request', async (payload, next): Promise<LlmCallConfig> => {
       const resolved = await next()
       const session = payload.agent.session
-      const projection = projectionCtx.sessionProjections.stateOf(session, 'modelSelection')
+      const projection = readHostProjectionView(projectionCtx, session, 'modelSelection')
       const targetProfile = acpAgentIdFromRoute(resolved.provider)
       const priorHistory = readSessionFacts(projectionCtx, session).priorSemanticHistory
       // The API controller contributes modelSelection for interactive hosts.

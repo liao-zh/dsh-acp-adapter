@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-subagent'
-import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import type {} from '@deepseek-ai/dsh-agent-team'
 import type {} from '../../contract/external-subagent.ts'
 import type { AcpNativeUserQuestionService, AcpPermissionQuestionService } from '../../domain/policy/elicitation.ts'
 
@@ -42,11 +42,34 @@ export function externalAgentPermissionQuestions(
   return {
     async ask(request: QuestionRequest, onPresentation) {
       const agents = ctx.get('agents', false)
+      const subagents = ctx.get('subagents', false)
       const child = getAgent()
-      if (agents === undefined || child === undefined || request.agent !== child || agents.get(child.id) !== child)
+      if (
+        agents === undefined ||
+        subagents === undefined ||
+        child === undefined ||
+        request.agent !== child ||
+        agents.get(child.id) !== child
+      )
         throw new ExternalPermissionQuestionError('CALLER_NOT_LIVE')
       if (request.signal?.aborted) throw new ExternalPermissionQuestionError('ASK_ABORTED')
-      if (agents.roots().includes(child)) return native.ask(request)
+      /** The runtime owner is authoritative; a detached identity has no live tree. */
+      const isRoot = (agent: Agent): boolean => {
+        try {
+          return subagents.rootOf(agent) === agent
+        } catch {
+          return false
+        }
+      }
+      const isOwnedBy = (subject: Agent, owner: Agent): boolean => {
+        if (subject.session.header.parentSession !== owner.id) return false
+        try {
+          return subagents.rootOf(subject) === subagents.rootOf(owner)
+        } catch {
+          return false
+        }
+      }
+      if (isRoot(child)) return native.ask(request)
 
       const projections = ctx.get('sessionProjections', false)
       if (projections === undefined) throw new ExternalPermissionQuestionError('DELEGATED_CALLER')
@@ -54,7 +77,7 @@ export function externalAgentPermissionQuestions(
       const path: { agent: Agent; name: string }[] = []
       const seen = new Set<Agent>()
       let root = child
-      while (!agents.roots().includes(root)) {
+      while (!isRoot(root)) {
         if (seen.has(root) || agents.get(root.id) !== root || root.session.header.origin !== 'subagent')
           throw new ExternalPermissionQuestionError('DELEGATED_CALLER')
         seen.add(root)
@@ -62,16 +85,13 @@ export function externalAgentPermissionQuestions(
         const identity = view.subagent
         if (identity == null || !root.session.isOwnSeq(identity.seq) || view.acpExecution?.externalSubagent === true)
           throw new ExternalPermissionQuestionError('DELEGATED_CALLER')
-        const membership = ctx.get('agentTeams', false)?.tryMembership(root)
         path.unshift({
           agent: root,
-          name:
-            sourceText(membership?.role === 'teammate' ? membership.name : (identity.label ?? '')) ||
-            (zh ? '子 Agent' : 'Subagent'),
+          name: sourceText(identity.label ?? '') || (zh ? '子 Agent' : 'Subagent'),
         })
         // The runtime owner is authoritative. Persisted parentSession is not a
         // permission to route a restored independent fork to an old parent.
-        const owners = agents.list().filter((candidate) => agents.isOwnedBy(root.id, candidate))
+        const owners = agents.list().filter((candidate) => isOwnedBy(root, candidate))
         if (owners.length !== 1) throw new ExternalPermissionQuestionError('DELEGATED_CALLER')
         root = owners[0]!
       }
@@ -79,10 +99,10 @@ export function externalAgentPermissionQuestions(
       const current = () =>
         getAgent() === child &&
         child.status === 'running' &&
-        agents.roots().includes(root) &&
+        isRoot(root) &&
         chain.every(
           (agent, index) =>
-            agents.get(agent.id) === agent && (index === 0 || agents.isOwnedBy(agent.id, chain[index - 1]!)),
+            agents.get(agent.id) === agent && (index === 0 || isOwnedBy(agent, chain[index - 1]!)),
         )
       if (!current()) throw new ExternalPermissionQuestionError('ASK_ABORTED')
 

@@ -1,17 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionDefinition, ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-tools'
 import { z } from 'zod'
 import { acpAgentIdFromRoute } from '../../domain/session/agent-config.ts'
+import { readProjectionState } from '../../domain/session/projection-read.ts'
 
 const forkTurnSchema = z.object({ completed: z.boolean(), active: z.boolean() })
 type ForkTurnState = z.infer<typeof forkTurnSchema>
-
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap {
-    acpForkDelegation: ForkTurnState
-  }
-}
 
 const forkTurnProjection = {
   key: 'acpForkDelegation',
@@ -24,7 +19,7 @@ const forkTurnProjection = {
       : event.type === 'turn/start'
         ? { ...state, active: true }
         : state,
-} satisfies ProjectionDefinition<'acpForkDelegation'>
+} satisfies ProjectionDefinition<'acpForkDelegation', ForkTurnState>
 
 /**
  * Reject a known ACP child target when an active parent can only offer a
@@ -35,7 +30,13 @@ const forkTurnProjection = {
  */
 export function installAcpForkTools(ctx: Context): void {
   ctx.inject(['tools', 'sessionProjections'], (child) => {
-    child.sessionProjections.register(forkTurnProjection)
+    // 0.2.2 returns a ready handle; the guard reads fold state through it, which
+    // survives registration release for the lifetime of this fiber.
+    let handle: ProjectionHandle<ForkTurnState> | undefined
+    const ready = child.sessionProjections.register(forkTurnProjection).then((registered) => {
+      handle = registered
+    })
+    void ready
     child.tools.guard((exec) => {
       if (exec.agent === undefined || exec.name !== 'subagent_fork') return
       const args = exec.arguments
@@ -47,7 +48,8 @@ export function installAcpForkTools(ctx: Context): void {
         acpAgentIdFromRoute(args.provider) === undefined
       )
         return
-      const state = child.sessionProjections.stateOf(exec.agent.session, 'acpForkDelegation')
+      if (handle === undefined) return
+      const state = readProjectionState(handle, exec.agent.session)
       if (state?.completed === true && state.active)
         return 'ACP_DELEGATED_FORK_UNAVAILABLE: An ACP child cannot inherit the completed prefix of an active conversation. Use subagent with a complete, self-contained task or select a native child route.'
     })

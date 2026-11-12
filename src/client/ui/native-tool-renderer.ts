@@ -26,7 +26,6 @@ export function nativeOwner(props: NativeOwner): NativeOwner {
     inspectCall,
     forkAt,
     loadImage,
-    fileMentions,
     turnProcess,
     node,
   } = props
@@ -39,7 +38,6 @@ export function nativeOwner(props: NativeOwner): NativeOwner {
     inspectCall,
     forkAt,
     loadImage,
-    fileMentions,
     turnProcess,
     node,
   }

@@ -4,7 +4,7 @@ import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import type {} from '@deepseek-ai/dsh-agent-team'
 import type {} from '@deepseek-ai/dsh-shell'
 import type {} from '@deepseek-ai/dsh-tools'
 

@@ -11,7 +11,6 @@ import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import type { AcpProbeOptions } from '../../protocol/v1/types.ts'
 import { acpAgentIdFromRoute, acpRouteId } from '../../domain/session/agent-config.ts'
 import type { AcpAgentConfig, AcpResolvedAgent } from '../../domain/session/agent-config.ts'
-import { createTeamManagement } from '../teams/management.ts'
 import { createToolApprovalPolicyReader } from '../subagent/tool-approval-policy.ts'
 import { createApprovalChildrenReader } from '../subagent/approval-children.ts'
 import { createAcpLogger } from '../../domain/observability/logging.ts'
@@ -29,7 +28,7 @@ import type { AcpSidecar } from '../../persistence/sidecar.ts'
 import type { AcpNativeUserQuestionService } from '../../domain/policy/elicitation.ts'
 import type { AcpNativeQuestionBinding } from './profile-adapter.ts'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { acpExecutionProjection, acpSessionView, readSessionFacts } from './session-facts.ts'
+import { acpExecutionProjection, acpSessionView, installExecutionProjectionHandle, readSessionFacts } from './session-facts.ts'
 import type { DispatchLedgerStore } from '../../runtime/session/dispatch-ledger.ts'
 import { resolveSubprocessSeam } from './subprocess.ts'
 import { AcpRemoteService } from '../../remote/service.ts'
@@ -244,7 +243,19 @@ export function installInstalledProfileRegistry(
   options: InstalledProfileRegistryOptions = {},
 ): InstalledProfileRegistry {
   const toolBridgeKey = createDshToolBridgeKey()
-  const disposeExecutionProjection = ctx.sessionProjections.register(acpExecutionProjection)
+  // 0.2.2 registration is asynchronous and yields the handle that reads this
+  // unit's fold state. Publishing the outcome keeps a failed registration
+  // visible as an unavailable projection instead of a silently absent one.
+  const executionProjection = ctx.sessionProjections.register(acpExecutionProjection)
+  const disposeExecutionProjection = () => {
+    void executionProjection.then(
+      (handle) => handle.dispose(),
+      () => undefined,
+    )
+  }
+  void executionProjection.then(installExecutionProjectionHandle, (error: unknown) => {
+    ctx.logger('dsh-acp').warn('acpExecution projection registration failed: %s', String(error))
+  })
   let disposed = false
   const log = createAcpLogger(ctx.logger)
   const sidecar = installAcpSidecar(ctx)
@@ -516,15 +527,10 @@ export function installInstalledProfileRegistry(
       approvalChildren: createApprovalChildrenReader(ctx, (provider) =>
         [...profileAdapters.keys()].some((id) => acpRouteId(id) === provider),
       ),
-      teamManagement: createTeamManagement(
-        ctx,
-        (provider) => [...profileAdapters.keys()].some((id) => acpRouteId(id) === provider),
-        async (id) => {
-          const lookup = await sidecar.readLatestBinding(id as never)
-          return lookup?.status === 'ok' ? lookup.binding.provider : undefined
-        },
-        { sidecar, adapterFor: (provider) => profileAdapters.get(provider.slice(4)) },
-      ),
+      // DSH 0.2.2 removes the Agent Teams roster, so there is no per-member
+      // model authority to read or write. Omitting the contribution makes the
+      // Remote surface answer "ACP Teams is unavailable" instead of serving
+      // stale membership, while the shared task board stays available.
       // Header/audit facts are read-only host facts.  Keeping them here makes
       // the additive provider composition useful to the stock header utility
       // without creating a second Agent lifecycle in the provider bridge.

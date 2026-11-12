@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import type {} from '@deepseek-ai/dsh-agent-team'
 import type { AcpSidecar } from '../../persistence/sidecar.ts'
 import type { AcpToolApprovalPolicySnapshot } from '../../contract/remote.ts'
+import { readHostProjectionView } from '../../domain/session/projection-read.ts'
 import { acpAgentIdFromRoute } from '../../domain/session/agent-config.ts'
 
 /** ACP transport approval preferences are separate from native delegated tool authority. */
@@ -30,7 +31,7 @@ export function createToolApprovalPolicyReader(
     if (header === undefined) throw new Error('ACP_TOOL_APPROVAL_SESSION_UNAVAILABLE')
     if (nativeParent && session !== undefined) {
       const committedProvider =
-        ctx.sessionProjections.stateOf(session, 'modelSelection')?.lastUsed?.provider ??
+        readHostProjectionView(ctx, session, 'modelSelection')?.lastUsed?.provider ??
         session.requestHeader?.()?.config.provider
       // A native request may have completed while this plugin was disabled.
       // Its old ACP binding and preference no longer govern a new child's
@@ -40,11 +41,11 @@ export function createToolApprovalPolicyReader(
     }
     const binding = await sidecar.readLatestBinding(sessionId as never)
     if (binding?.status === 'outdated') throw new Error('ACP_TOOL_APPROVAL_POLICY_UNAVAILABLE')
-    const selected = session === undefined ? undefined : ctx.sessionProjections.stateOf(session, 'modelSelection')
+    const selected = session === undefined ? undefined : readHostProjectionView(ctx, session, 'modelSelection')
     const agent = ctx.get('agents', false)?.get(sessionId as never)
     const provider =
       binding?.binding.provider ??
-      selected?.pending?.provider ??
+      selected?.next?.provider ??
       selected?.lastUsed?.provider ??
       session?.requestHeader?.()?.config.provider ??
       agent?.options.provider ??
@@ -59,16 +60,26 @@ export function createToolApprovalPolicyReader(
         return { sessionId, policy: defaultPolicy(), source: 'session', editable: false }
       throw new Error('ACP_TOOL_APPROVAL_SESSION_NOT_ACP')
     }
-    const teams = ctx.get('agentTeams', false)
-    const membership = agent === undefined ? undefined : teams?.tryMembership(agent)
+    // 0.2.2 removes the Team roster; a member is any descendant of a live
+    // subagent tree root, and that root is the authority for the shared policy.
+    const subagents = ctx.get('subagents', false)
+    /** The live tree root an Agent belongs to, or undefined outside a resolvable tree. */
+    const rootOfAgent = (subject: Agent): Agent | undefined => {
+      if (subagents === undefined) return undefined
+      try {
+        return subagents.rootOf(subject)
+      } catch {
+        return undefined
+      }
+    }
+    const membershipRoot = agent === undefined ? undefined : rootOfAgent(agent)
     let root: Agent | undefined
-    let teamId: string | undefined
-    if (membership?.role === 'teammate') {
-      root = membership.root
-      teamId = membership.id
-    } else if (header.origin === 'subagent' && teams !== undefined && header.parentSession !== undefined) {
-      // Every ordinary root is an implicit Lead. A child belongs to its Team
-      // only when the authoritative roster contains that exact child id.
+    if (membershipRoot !== undefined && membershipRoot !== agent) {
+      // A descendant shares the root's approval policy.
+      root = membershipRoot
+    } else if (header.origin === 'subagent' && subagents !== undefined && header.parentSession !== undefined) {
+      // Every ordinary root is an implicit Lead. A child belongs to that root's
+      // tree only when the runtime owner confirms the live ancestry.
       let parent = ctx.get('agents', false)?.get(header.parentSession)
       const saved = await sidecar.readToolApprovalPolicy(sessionId as never)
       const parentSession = sessionOf(header.parentSession)
@@ -83,17 +94,11 @@ export function createToolApprovalPolicyReader(
         parent = ctx.get('agents', false)?.get(header.parentSession)
       }
       if (parent !== undefined) {
-        const parentMembership = teams.tryMembership(parent)
-        if (parentMembership === undefined && parentSession?.header.origin !== 'subagent')
+        if (rootOfAgent(parent) === undefined && parentSession?.header.origin !== 'subagent')
           throw new Error('ACP_TOOL_APPROVAL_LEAD_UNAVAILABLE')
-        if (parentMembership?.role === 'lead' && parentMembership.root === parent) {
-          const row = teams.listMembers(parent).find((entry) => entry.id === sessionId && entry.role === 'teammate')
-          if (row !== undefined) {
-            if (row.status === 'failed' || (agent !== undefined && membership === undefined))
-              throw new Error('ACP_TOOL_APPROVAL_LEAD_UNAVAILABLE')
-            root = parent
-            teamId = parentMembership.id
-          }
+        if (rootOfAgent(parent) === parent) {
+          const belongs = agent !== undefined && rootOfAgent(agent) === parent
+          if (belongs) root = parent
         }
       } else if (saved === undefined) {
         throw new Error('ACP_TOOL_APPROVAL_LEAD_UNAVAILABLE')
@@ -102,25 +107,12 @@ export function createToolApprovalPolicyReader(
     if (root !== undefined) {
       const lead = root
       const authenticated = (): boolean => {
-        const currentLead = teams?.tryMembership(lead)
-        if (
-          ctx.get('agents', false)?.get(lead.id) !== lead ||
-          currentLead?.role !== 'lead' ||
-          currentLead.root !== lead ||
-          currentLead.id !== teamId
-        )
-          return false
-        if (agent !== undefined) {
-          const current = teams?.tryMembership(agent)
-          return (
-            ctx.get('agents', false)?.get(agent.id) === agent &&
-            current?.role === 'teammate' &&
-            current.root === lead &&
-            current.id === teamId
-          )
+        if (ctx.get('agents', false)?.get(lead.id) !== lead || rootOfAgent(lead) !== lead) return false
+        if (agent === undefined) {
+          // A cold descendant proves its claim through the runtime tree only.
+          return subagents !== undefined && rootOfAgent(lead) === lead
         }
-        const row = teams?.listMembers(lead).find((entry) => entry.id === sessionId && entry.role === 'teammate')
-        return row !== undefined && row.status !== 'failed'
+        return ctx.get('agents', false)?.get(agent.id) === agent && rootOfAgent(agent) === lead
       }
       if (!authenticated()) throw new Error('ACP_TOOL_APPROVAL_LEAD_UNAVAILABLE')
       const policy = await sidecar.readToolApprovalPolicy(lead.id, defaultPolicy())

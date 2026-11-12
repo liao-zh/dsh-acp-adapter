@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import type { TeamProjection } from '@deepseek-ai/dsh-experimental-agent-team/client'
+import type { TeamProjection } from '@deepseek-ai/dsh-agent-team/client'
 import { projectionRevision, teamRoster } from '../../../src/client/ui/team-projection.ts'
 
 const projection = (patch: Partial<TeamProjection> = {}): TeamProjection => ({

@@ -41,7 +41,7 @@ vi.mock('react', () => ({
 
 import { AcpTeamApprovals } from '../../../src/client/ui/AcpTeamApprovals.ts'
 import type { AcpApprovalChildView } from '../../../src/client/data/acp-remote.ts'
-import type { TeamProjection } from '@deepseek-ai/dsh-experimental-agent-team/client'
+import type { TeamProjection } from '@deepseek-ai/dsh-agent-team/client'
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 

@@ -38,7 +38,6 @@ import {
   selectExternalSubagentRecord,
 } from './ui/AcpExternalSubagentComposer.ts'
 import type { SessionAccessSource } from './ui/session-action-access.ts'
-import { AcpTeamManagement } from './ui/AcpTeamManagement.ts'
 import { AcpTeamApprovals } from './ui/AcpTeamApprovals.ts'
 import type { AcpTeamApprovalActions } from './ui/AcpTeamApprovals.ts'
 import { followNativeTeamUi } from './ui/native-team-ui-lifecycle.ts'
@@ -288,60 +287,12 @@ async function registerUi(ctx: ClientContext): Promise<void> {
     ),
   )
   const coordinator = new CrossBackendCoordinator(ctx, managedRoutes.owns)
-  // DSH publishes team identity through the shared Session projection. The ACP
-  // Remote remains responsible for ACP-specific metadata and authorized writes.
-  ctx.inject(['remote.subagents', 'uiSession'], (teamCtx) => {
-    const actions = {
-      status: teamCtx.uiSession.sessionStatus,
-      isCurrent: (sessionId: SessionId) => isMainSession(sessions, sessionId),
-      ownsRoute: managedRoutes.owns,
-      async loadMembers(sessionId: SessionId) {
-        const result = await acpRemote.teamMembers(sessionId)
-        if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code })
-        return result.value
-      },
-      async openMember(parentSessionId: SessionId, childSessionId: SessionId) {
-        if (!isMainSession(sessions, parentSessionId)) return
-        openSubagentAside(ctx.sidebarRight, { parentSessionId, childSessionId, mode: 'continuable' })
-      },
-    }
-    teamCtx.effect(
-      () =>
-        followNativeTeamUi(teamCtx.slots, () => {
-          const unmount = teamCtx.effect(function* () {
-            yield teamCtx.slots.inject('conversation.session.header.utilities', () =>
-              teamCtx.slots.register(
-                {
-                  name: 'conversation.session.header.utilities',
-                  id: 'acp-team-management',
-                  order: 94,
-                  locale: 'acpActivity',
-                  inject: () => ({
-                    remote: ctx.remote.dshAcp,
-                    streamFactory: ctx.remote,
-                    loadMembers: actions.loadMembers,
-                    ownsRoute: managedRoutes.owns,
-                    isCurrent: actions.isCurrent,
-                    status: actions.status,
-                    openMember: actions.openMember,
-                    sessionAccessSource,
-                    async interruptMember(lead: SessionId, member: SessionId) {
-                      const result = await teamCtx.remote.subagents.interruptByParent(member, lead, 'continuable')
-                      if (!result.ok) throw new Error(result.error.message)
-                    },
-                  }),
-                },
-                AcpTeamManagement,
-              ),
-            )
-          }, 'dsh-acp: active native Team controls')
-          return () => {
-            void unmount()
-          }
-        }),
-      'dsh-acp: native Team UI lifecycle',
-    )
-  })
+  // DSH 0.2.2 removes the Agent Teams roster and the parent-authorized
+  // interrupt endpoint. The ACP Team panel was built entirely from that
+  // membership view, so mounting it would render an empty control that can
+  // neither list nor interrupt members. Teammates are ordinary subagents now
+  // and keep their native subagent UI; the shared task board is unaffected.
+  void followNativeTeamUi
   ctx.inject(['uiSession'], (approvalCtx) => {
     const actions: AcpTeamApprovalActions = {
       status: approvalCtx.uiSession.sessionStatus,

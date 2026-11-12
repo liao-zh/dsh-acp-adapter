@@ -131,7 +131,7 @@ it('follows the native Teams bundle and UI lifecycle while retaining the same co
   const errors: string[] = []
   try {
     const manager = host.ctx.pluginManager
-    const bundle = '@deepseek-ai/dsh-experimental-agent-team-profile'
+    const bundle = '@deepseek-ai/dsh-agent-team-profile'
     // Start the browser with Teams disabled through the official profile owner.
     expect(await manager.setBundleEnabled(bundle, false)).toMatchObject({ application: 'applied' })
     await vi.waitFor(() => expect(host.ctx.get('agentTeams')).toBeUndefined())

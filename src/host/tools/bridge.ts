@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-tools'
 import { RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
-import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
+import type { ToolDefinition, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import type * as acp from '@agentclientprotocol/sdk'
 import { Server } from '@modelcontextprotocol/server'
@@ -975,10 +975,7 @@ export async function createDshToolBridge(
               diagnosticTargetRole =
                 args.target === 'lead'
                   ? 'lead'
-                  : typeof args.target === 'string' &&
-                      teamContext
-                        ?.listMembers()
-                        .some((member) => member.name === args.target && member.role === 'teammate')
+                  : typeof args.target === 'string' && teamContext?.isTeammateName(args.target) === true
                     ? 'teammate'
                     : 'unknown'
             } catch {
@@ -986,14 +983,18 @@ export async function createDshToolBridge(
             }
           }
           releaseExecution = await executionScheduler.acquire(
-            () =>
-              tools.executionMode({
-                callId: hostCallId as never,
-                name: definition.name,
-                arguments: args,
-                agent,
-                signal: dispatchSignal,
-              }).kind,
+            () => {
+              // 0.2.2 removes ToolsService.executionMode; the tool's own
+              // concurrency classifier is the only overlap authority, and any
+              // exception or non-true answer keeps the call exclusive.
+              const classifier = definition.isConcurrencySafe
+              if (classifier === undefined) return 'exclusive'
+              try {
+                return classifier(args) === true ? 'parallel' : 'exclusive'
+              } catch {
+                return 'exclusive'
+              }
+            },
             dispatchSignal,
           )
           if (
@@ -1089,17 +1090,31 @@ export async function createDshToolBridge(
             bodySignal.addEventListener('abort', onDispatchAbort, { once: true })
             if (bodySignal.aborted) onDispatchAbort()
           }
-          let result: Awaited<ReturnType<typeof tools.execute>>
+          let result: ToolExecutionResult
           try {
-            result = await agents.withInitiator(agent, () =>
+            // 0.2.2 executes complete batches only: one ToolCallBlock carries the
+            // JSON-encoded arguments, and the settled batch yields one result
+            // per input call in input order.
+            const batch = await agents.withInitiator(agent, () =>
               tools.execute({
-                callId: hostCallId as never,
-                name: definition.name,
-                arguments: args,
+                calls: [
+                  {
+                    type: 'tool-call' as const,
+                    id: hostCallId as never,
+                    name: definition.name,
+                    arguments: JSON.stringify(args ?? {}),
+                  },
+                ],
                 agent,
                 signal: bodySignal,
               }),
             )
+            const settled = batch.results[0]
+            if (settled === undefined) throw new Error('acp-bridge: tool batch returned no result')
+            result = {
+              ...settled.result,
+              additionalContexts: [...(settled.result.additionalContexts ?? []), ...batch.additionalContexts],
+            }
             if (toolErrorInfoCode(result.error) === TOOL_ABORTED_BEFORE_DISPATCH)
               callRecord.abortedBeforeDispatch = true
             if (diagnosticEnabled && diagnosticBase !== undefined) {

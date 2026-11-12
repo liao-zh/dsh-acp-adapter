@@ -1,5 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
+import { readHostProjectionView, readProjectionState } from '../../domain/session/projection-read.ts'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type { AcpExecutionView } from '../../contract/external-subagent.ts'
 import type { Session, SessionEventMap } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
@@ -35,12 +37,30 @@ export const acpExecutionProjection = {
     viewSchema: z.object({ externalSubagent: z.boolean() }),
     view: (state) => (state.externalSubagent ? externalRecordView : ordinarySessionView),
   },
-} satisfies ProjectionDefinition<'acpExecution'>
+} satisfies ProjectionDefinition<'acpExecution', SessionFacts>
 
-export function readSessionFacts(ctx: Context, session: Session): SessionFacts {
-  const state = ctx.sessionProjections.stateOf(session, 'acpExecution')
-  if (state === undefined) throw new Error('ACP execution projection is unavailable')
-  return state
+/**
+ * The registration handle for this package's own `acpExecution` unit.
+ *
+ * DSH 0.2.2 reads a registered unit's fold state through the handle returned by
+ * `register()`, and that handle is only available to the composition that
+ * registered it. The adapter registers exactly one such unit per profile
+ * registry, so the composition publishes its handle here before serving reads;
+ * a read before publication fails closed instead of folding a second time.
+ */
+let executionProjectionHandle: ProjectionHandle<SessionFacts> | undefined
+
+/**
+ * Publish the registered `acpExecution` handle for subsequent reads.
+ * @param handle - the ready handle returned by `sessionProjections.register`.
+ */
+export function installExecutionProjectionHandle(handle: ProjectionHandle<SessionFacts>): void {
+  executionProjectionHandle = handle
+}
+
+export function readSessionFacts(_ctx: Context, session: Session): SessionFacts {
+  if (executionProjectionHandle === undefined) throw new Error('ACP execution projection is unavailable')
+  return readProjectionState(executionProjectionHandle, session)
 }
 
 /** Accessors always read the host's current cut, including after a policy append. */
@@ -88,7 +108,7 @@ export function acpSessionView(ctx: Context, session: Session | undefined): Sess
       return currentModelContextSnapshots(session.deriveMessages(), skillEntryPointAvailable)
     },
     get permissions() {
-      const state = ctx.sessionProjections.stateOf(session, 'permissions')
+      const state = readHostProjectionView(ctx, session, 'permissions')
       if (state === undefined) throw new Error('DSH permission projection is unavailable')
       return state
     },
@@ -132,7 +152,7 @@ export function acpSessionView(ctx: Context, session: Session | undefined): Sess
     },
     publishPlan: (todos) => {
       // tool-todo is optional. Its projection owns current plan state and the native dock.
-      if (ctx.sessionProjections.stateOf(session, 'todos') === undefined) return
+      if (readHostProjectionView(ctx, session, 'todos') === undefined) return
       session.append('todo/write', { todos: [...todos] })
     },
   }

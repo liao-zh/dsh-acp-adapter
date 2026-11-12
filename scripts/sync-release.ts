@@ -178,4 +178,14 @@ ${fileCount} artifact files.`])
   if (run('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${snapshotBranch}`]).status === 0) dropSnapshotBranch()
   const current = run('git', ['branch', '--show-current']).output
   if (current !== initialBranch) restore(initialBranch)
+  // `lib/` is gitignored on the source branch, so switching back to it removes
+  // the build output that a local `link:` profile reads. Restore it, or the
+  // plugin directory is left without an entry module.
+  if (!existsSync(join(root, 'lib', 'index.js'))) {
+    console.log(`[sync-release] rebuilding lib/ for ${initialBranch}, where it is not tracked`)
+    const shell = process.platform === 'win32'
+    const rebuilt = spawnSync(shell ? 'pnpm.cmd' : 'pnpm', ['run', 'build'], { cwd: root, stdio: 'inherit', shell })
+    if ((rebuilt.status ?? 1) !== 0)
+      console.error('[sync-release] WARNING: lib/ is missing and rebuild failed; a local link: install cannot load')
+  }
 }

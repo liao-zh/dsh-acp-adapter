@@ -56,6 +56,12 @@ git rebase main
 
 `sync:release` 的守卫：工作区不干净、tag 已存在、构建没产出 `lib/index.js`、没有暂存到任何产物——任一不满足即拒绝，并用 `finally` 恢复原分支、清理临时分支。
 
+⚠️ **`lib/` 在 `custom` 分支上被 gitignore**。任何切到 `release`（该分支跟踪 `lib/`）再切回来的操作，都会让 Git 删掉工作区的 `lib/`，于是本地 `link:` 安装的插件失去入口。`sync:release` 的 `finally` 已处理这一点：切回后若发现 `lib/index.js` 缺失会自动重建。**手工切分支时须自己重建**：
+
+```sh
+git switch release && git switch custom && pnpm build
+```
+
 `--allow-dirty` 可跳过工作区检查，仅供脚本自身开发时 dry-run。
 
 > 脚本用 `node` 直接跑即可（Node 26 原生剥离 TS 类型）；`pnpm run` 需要能写

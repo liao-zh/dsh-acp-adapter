@@ -1,0 +1,1 @@
+{"version":3,"file":"external-subagent.d.ts","sourceRoot":"","sources":["../../../src/contract/external-subagent.ts"],"names":[],"mappings":"AAAA,0FAA0F;AAC1F,eAAO,MAAM,qCAAqC,oBAAoB,CAAA;AAEtE,MAAM,WAAW,gBAAgB;IAC/B,0FAA0F;IAC1F,QAAQ,CAAC,gBAAgB,EAAE,OAAO,CAAA;CACnC;AAED,OAAO,QAAQ,2CAA2C,CAAC;IACzD,UAAU,oBAAoB;QAC5B,YAAY,EAAE,gBAAgB,CAAA;KAC/B;CACF"}

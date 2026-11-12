@@ -24,7 +24,6 @@ vi.mock('react', () => ({
 
 import { AcpAgentControl } from '../../../src/client/ui/AcpAgentControl.ts'
 import { AcpRecoveryDock } from '../../../src/client/ui/AcpRecoveryDock.ts'
-import { TeamMemberModelControl } from '../../../src/client/ui/TeamMemberModelControl.ts'
 import type { AcpAgentSessionSnapshotView } from '../../../src/contract/remote.ts'
 
 // Use the installed RC1 grant producer, not a hand-written boolean permission
@@ -122,41 +121,6 @@ function setup(owner = false, workspace = true) {
       feedback: { report: vi.fn() },
     } as never) as Tree
   }
-  const model = (status: 'inactive' | 'running' = 'inactive') => {
-    seed([
-      false,
-      {
-        currentModel: 'a',
-        pendingModel: null,
-        writable: true,
-        models: [
-          { id: 'a', name: 'A' },
-          { id: 'b', name: 'B' },
-        ],
-      },
-      false,
-      false,
-      null,
-      0,
-    ])
-    return TeamMemberModelControl({
-      ...common,
-      lead: 'lead',
-      member: {
-        sessionId: 'child',
-        profileId: 'codex',
-        name: 'Child',
-        model: 'a',
-        modelWritable: true,
-        status,
-        description: null,
-      },
-      initialModel: 'a',
-      sessionReady: true,
-      isCurrent: () => true,
-      onMenuOpen: () => {},
-    } as never)
-  }
   const recovery = () => {
     seed([
       { dshSessionId: 'lead', kind: 'outcome-unknown', cause: null, detail: null },
@@ -171,7 +135,7 @@ function setup(owner = false, workspace = true) {
     ])
     return AcpRecoveryDock({ ...common, createNewSession } as never)
   }
-  return { state, remote, control, model, recovery, createNewSession }
+  return { state, remote, control, recovery, createNewSession }
 }
 function groups(tree: Tree): { choices: { disabled: boolean; write: { kind: string } }[] }[] {
   return tree.props.groups as never
@@ -181,9 +145,6 @@ function select(tree: Tree, kind: string) {
     .flatMap((group) => group.choices)
     .find((item) => item.write.kind === kind)!
   ;(tree.props.onSelect as (choice: unknown) => void)(choice)
-}
-function modelMenu(value: unknown): Tree {
-  return nodes(value).find((node) => Array.isArray(node.props.items))!
 }
 function recoveryButton(value: unknown, label: string): Tree {
   return nodes(value).find(
@@ -232,31 +193,6 @@ it('rechecks actual grants in an already-open mode menu and updates after revoca
   ).toBe(false)
   select(restored, 'mode')
   expect(h.remote.setAgentSessionOption).toHaveBeenCalledOnce()
-})
-
-it('requires both lead and child model-write grants and rechecks an open member menu before dispatch', () => {
-  const h = setup()
-  const action = ['dshAcp/setTeamMemberModel']
-  grants(h.state, 'lead', action)
-  expect((modelMenu(h.model()).props.items as { disabled: boolean }[]).every((item) => item.disabled)).toBe(true)
-  grants(h.state, 'child', action)
-  const opened = modelMenu(h.model())
-  expect((opened.props.items as { disabled: boolean }[]).some((item) => item.disabled)).toBe(false)
-  grants(h.state, 'lead', [])
-  ;(opened.props.onSelect as (id: string) => void)('b')
-  expect(h.remote.setTeamMemberModel).not.toHaveBeenCalled()
-  grants(h.state, 'lead', action)
-  ;(modelMenu(h.model()).props.onSelect as (id: string) => void)('b')
-  expect(h.remote.setTeamMemberModel).toHaveBeenCalledExactlyOnceWith('lead', 'child', 'b')
-})
-
-it('keeps native owner model controls enabled without granting a busy member a write', () => {
-  const h = setup(true)
-  expect((modelMenu(h.model()).props.items as { disabled: boolean }[]).some((item) => item.disabled)).toBe(false)
-  const busy = modelMenu(h.model('running'))
-  expect((busy.props.items as { disabled: boolean }[]).every((item) => item.disabled)).toBe(true)
-  ;(busy.props.onSelect as (id: string) => void)('b')
-  expect(h.remote.setTeamMemberModel).not.toHaveBeenCalled()
 })
 
 it('disables ACP recovery writes for a reader and rechecks a previously opened recovery action', async () => {

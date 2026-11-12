@@ -93,14 +93,18 @@ async function harness(mode: 'native' | 'ptc' = 'native') {
     owner.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     owner.session.append('turn/start', { turn: 2 })
   }
-  const execute = (owner: Agent, name: string, args = {}) =>
-    ctx.tools.execute({
-      callId: ToolCallId(`${name}-call`),
-      name,
-      arguments: args,
+  // 0.2.2 executes complete batches; unwrap the single settled result so callers
+  // keep reading isError/content/concludesTurn off one outcome.
+  const execute = async (owner: Agent, name: string, args = {}) => {
+    const batch = await ctx.tools.execute({
+      calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }],
       agent: owner,
       signal: new AbortController().signal,
     })
+    const settled = batch.results[0]
+    if (settled === undefined) throw new Error('tool batch returned no result')
+    return settled.result
+  }
   return { ctx, bodies, register, removeFork, mount, agent, completed, execute }
 }
 

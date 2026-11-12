@@ -34,11 +34,91 @@ git rebase main
 1. 改 `package.json` 的 `engines.dsh`，并把 peer/dev 里所有 `@deepseek-ai/dsh-*` 同步到同一版本。
    `scripts/verify-dev-dependencies.ts` 强制相等，漏一个 build 就失败。
 2. 注意改名：`@deepseek-ai/dsh-experimental-agent-team` 自 0.2.2 起叫 `@deepseek-ai/dsh-agent-team`。
-3. `pnpm install && pnpm typecheck` —— **这一步就是版本敏感点扫描器**，会列出所有签名对不上的调用点。
-4. 修完 `pnpm build`。
+3. **同族的非 `dsh-` 包也要对齐宿主声明**，漏掉会引发 pnpm 双实例（详见「已知遗留」）：
+   `cordis`（`~4.1.0`）、`cordis-plugin-loader`（`~1.1.0`）、`cordis-plugin-group`（`~1.1.0`）、
+   `cordis-plugin-include`（`~1.1.0`）、`cordis-plugin-timer`（`~1.2.0`）、`schemastery`（`~3.19.0`）。
+   查法：读宿主 `package.json` 的同名字段，或看 `node_modules/.pnpm` 里是否有同版本的多个哈希目录。
+4. `pnpm install && pnpm typecheck` —— **这一步就是版本敏感点扫描器**，会列出所有签名对不上的调用点。
+5. 修完 `pnpm build`。
 
 不维护「版本敏感点清单」：51 个宿主包、221 处 import、19 个服务、64 处 `ctx.get`，
 全量列表的维护成本高于收益，而 typecheck 已覆盖 call-site 这一类。
+
+## 日常脚本
+
+三个只读写本地状态的维护脚本（除 `--push` 外都不动远端）：
+
+| 命令 | 用途 | 退出码 |
+|---|---|---|
+| `pnpm run check:fork-state [-- --host 0.2.2-rc.2]` | **开工体检**：当前分支、工作区、上游落后、`release` 是否含 `lib/`、版本号与 tag 是否一致、`engines.dsh` 是否匹配运行版、依赖是否装齐 | 0 全通过 / 1 有失败 |
+| `pnpm run check:release-freshness` | **发版前自查**：`custom` 有没有改过产出物料的路径（`src`、`package.json`、`pnpm-lock.yaml`、`tsconfig.json`、`tsdown.config.ts`、`scripts`）却没重建 `release` | 0 最新 / 1 需重建 / 2 分支或产物缺失 |
+| `pnpm run sync:release [-- --push]` | **发版**：构建 → 单提交快照（含 `lib/`）→ 移动 `release` → 打 tag。默认只做本地 | 0 成功 / 1 失败 |
+
+`sync:release` 的守卫：工作区不干净、tag 已存在、构建没产出 `lib/index.js`、没有暂存到任何产物——任一不满足即拒绝，并用 `finally` 恢复原分支、清理临时分支。
+
+`--allow-dirty` 可跳过工作区检查，仅供脚本自身开发时 dry-run。
+
+> 脚本用 `node` 直接跑即可（Node 26 原生剥离 TS 类型）；`pnpm run` 需要能写
+> `%LOCALAPPDATA%\pnpm-store-operation-locks`，沙箱会话里要给一次 full-access。
+> 脚本内部调用 git 时把输出重定向到临时文件而非管道——沙箱禁止子进程走管道（EPERM）。
+
+## 发版流程
+
+```sh
+# 1. 确认源码已提交、版本号已改
+pnpm run check:fork-state -- --host <宿主版本>
+
+# 2. 自查 release 是否已过期
+pnpm run check:release-freshness
+
+# 3. 重建（默认只在本地；先看不带 --push 的结果）
+pnpm run sync:release
+
+# 4. 确认无误后推送
+pnpm run sync:release -- --push
+```
+
+**只有改了产出物料的路径才需要重建 `release`**。只改 `notes/`、`AGENTS.md`、
+`README.md` 或测试时，`check:release-freshness` 会报 OK，可跳过第 3、4 步。
+
+## 已知遗留
+
+### 测试与 Devin 实测脚本不再覆盖 Team 成员功能
+
+DSH 0.2.2 删除了 Agent Teams 的 roster（`tryMembership` / `listMembers` / `spawnTeammate` /
+`sendMessage` / `interrupt` / `waitForChange`），只保留任务板。依赖这些 API 的测试与脚本因此失效：
+
+| 范围 | 处置 |
+|---|---|
+| `tsconfig.tools.json` 的 `scripts/check-devin-live.ts` | 排除。该脚本 29 处依赖 Team 实测，被验证的功能本身已不存在 |
+| `tsconfig.test.json` 中 14 个测试文件 | 待处理（37 个错误，多为 Team 相关） |
+| 已删除：`test/unit/runtime/team-management.spec.ts`、`test/unit/client/team-member-state.spec.ts` | 它们导入的源码已随功能一起删除 |
+
+**`pnpm typecheck` 的 `tsconfig.json` 与 `tsconfig.tools.json` 两门是绿的**；只有
+`tsconfig.test.json` 一门因上述原因仍报错。`build`（只跑 `tsconfig.json`）不受影响，
+发版流程正常。
+
+### pnpm 双实例（已修复，记录成因）
+
+升级初期 pnpm 解析出**两份 `cordis@4.1.0`**（连 `dsh-app-boot`、`dsh` 也各两份），
+导致 `runProfile()` 返回的 `Context` 与 `dsh-agent` 的类型声明不在同一模块实例上，
+`ctx.agents` 等在类型上全部不存在（36 个错误）。
+
+根因：`package.json` 里两个**不以 `dsh-` 开头**的开发依赖仍停在 0.2.1 时代：
+
+```diff
+- "@deepseek-ai/cordis-plugin-group": "1.0.5",
+- "@deepseek-ai/cordis-plugin-loader": "1.0.6",
++ "@deepseek-ai/cordis-plugin-group": "1.1.0",
++ "@deepseek-ai/cordis-plugin-loader": "1.1.0",
+```
+
+`loader@1.0.6` 让 pnpm 为它建立独立的 peer 环境，于是同一版本的 cordis 出现两个哈希目录。
+
+**教训**：升级 DSH 目标版本时，不能只替换 `@deepseek-ai/dsh-*`；`cordis`、
+`cordis-plugin-loader`、`cordis-plugin-group`、`cordis-plugin-include`、
+`cordis-plugin-timer`、`schemastery` 这些同族包也要对齐宿主声明。旧 `node_modules`
+里的残留符号链接会让问题在 `pnpm install` 后继续存在，必要时删掉 `node_modules` 重装。
 
 ## 已炸过的 seam
 

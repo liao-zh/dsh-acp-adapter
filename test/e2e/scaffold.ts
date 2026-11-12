@@ -89,7 +89,9 @@ export async function launchAdapterWorld({
       ...[...new Set(optionalBundles)].map((bundle) => ({ dir: optionalBundleDirectory(bundle), enabled: true })),
     ]
     const patches: string[] = []
-    if (teamMembers !== undefined) patches.push(`- id: agent-team\n  config:\n    maxMembers: ${teamMembers}\n`)
+    // 0.2.2 removed maxMembers: teammates are subagents, so subagent limits apply.
+    // The parameter is kept so existing callers keep compiling; it no longer emits config.
+    if (teamMembers !== undefined) void teamMembers
     if (terminalShell !== undefined)
       patches.push(`- id: terminal-controller\n  config:\n    shell: ${JSON.stringify(terminalShell)}\n`)
     patches.push(...extraPatches)

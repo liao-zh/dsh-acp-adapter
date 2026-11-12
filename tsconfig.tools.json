@@ -14,5 +14,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["scripts/**/*.ts", "test/mock-agent/**/*.ts"]
+  "include": ["scripts/**/*.ts", "test/mock-agent/**/*.ts"],
+  "exclude": [
+    "scripts/check-devin-live.ts"
+  ]
 }

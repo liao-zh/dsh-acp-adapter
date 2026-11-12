@@ -27,7 +27,8 @@ import { initProfile, loadProfileDirectory, loadLayeredEnv } from '@deepseek-ai/
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent-team'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -336,7 +337,7 @@ try {
   process.chdir(workspace)
   const bundles = [
     '@deepseek-ai/dsh-base',
-    '@deepseek-ai/dsh-experimental-agent-team-profile',
+    '@deepseek-ai/dsh-agent-team',
     '@zaimokuza/dsh-acp-adapter',
   ]
   initProfile(profileDir, bundles)
@@ -360,7 +361,8 @@ try {
         'skill-filesystem',
         'session-telemetry-otel',
       ].map((id) => ({ id, disabled: true })),
-      { id: 'agent-team', config: { maxMembers: 2, maxTasks: 8 } },
+      // 0.2.2 removed maxMembers: teammates are subagents, so subagent limits apply.
+      { id: 'agent-team', config: { maxTasks: 8 } },
       { id: 'permission', config: { defaultPreset: 'danger-full-access' } },
       { id: 'sandbox-policy', config: { mode: 'danger-full-access', workspaceRoot: workspace } },
     ]),

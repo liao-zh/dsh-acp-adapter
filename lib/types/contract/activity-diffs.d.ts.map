@@ -1,0 +1,1 @@
+{"version":3,"file":"activity-diffs.d.ts","sourceRoot":"","sources":["../../../src/contract/activity-diffs.ts"],"names":[],"mappings":"AAAA,mFAAmF;AACnF,MAAM,WAAW,YAAY;IAC3B,IAAI,EAAE,MAAM,CAAA;IACZ,OAAO,EAAE,MAAM,GAAG,IAAI,CAAA;IACtB,OAAO,EAAE,MAAM,CAAA;CAChB;AAED,wBAAgB,eAAe,CAAC,KAAK,EAAE,OAAO,GAAG,YAAY,EAAE,CAoB9D"}

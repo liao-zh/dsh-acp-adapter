@@ -360,7 +360,12 @@ if (packOutput !== null) {
       }
       if (path.startsWith('lib/client/'))
         fail(`tarball 含 tsc 版 client 半（浏览器只消费 lib/client.js bundle）: ${path}`)
-      if (path.endsWith('.d.ts.map')) fail(`tarball 含 declaration map（不进 payload）: ${path}`)
+      // DSH 0.2.2's typert generator requires `files` to list
+      // lib/typert.remote-client.d.ts.map before it emits the Remote artifacts,
+      // and an explicit `files` entry wins over any .npmignore or negative
+      // pattern. That one map therefore ships with the tarball.
+      if (path.endsWith('.d.ts.map') && path !== 'lib/typert.remote-client.d.ts.map')
+        fail(`tarball 含 declaration map（不进 payload）: ${path}`)
       if (path.endsWith('.js.map') && path !== 'lib/client.js.map')
         fail(`tarball 含宿主半 source map（仅 client bundle 需要）: ${path}`)
     }

@@ -48,6 +48,11 @@ git rebase main
 |---|---|---|
 | `agentTeams.tryMembership` / `listMembers` 等 roster 面 | 0.2.2-rc.2 删掉整个 roster；`ctx.get(...)?.` 只兜「服务不存在」，兜不住「服务在、方法没了」 | 降级为「非 Team 会话」 |
 | `tools.execute` | 0.2.2 只收批次 `ToolBatchInput`；旧签名报 `Tool batch execution failed`（cause 被丢弃） | 改批次调用；**重装插件会覆盖本地补丁，必须走 fork** |
+| `LlmError` 构造器 | 0.2.2 只接受 `BuiltinLlmFailureCode`；适配器自有 code 直接传会类型报错 | 走 `LlmError.fromFailure({ message, code })` |
+| `sessionProjections.stateOf(session, key)` | 已废弃，返回 `unknown`，不参与 `SessionProjectionMap` 收窄 | 自注册单元用 `ProjectionHandle.stateOf`；宿主单元用 `snapshot().values` |
+| `sessionProjections.register()` | 0.2.2 起返回 `Promise<ProjectionHandle<S>>` | `await` 后保存 handle；同步 `ctx.effect` 里用 `.then()` 注入 |
+| `agents.roots()` / `isOwnedBy()` | 0.2.2 从 `AgentRegistry` 删除 | `subagents.rootOf(x) === x` 判根；`rootOf(a) === rootOf(b) && parentSession` 判归属 |
+| zod 双实例 | 适配器 4.4.3、宿主 4.6.6 时 `ZodType` 类型不兼容 | zod 版本与宿主对齐 |
 
 ## 不做
 
@@ -58,7 +63,28 @@ git rebase main
 ## 安装与使用
 
 - **本机**：profile 的 `package.json` 用 `link:` 指向本仓库；改完 `pnpm build` 后**完全退出 DSH 再启动**（ESM 模块缓存不热重载）。
-- **远程**：`dsh plugin add github:liao-zh/dsh-acp-adapter#release`
+- **远程**：`dsh plugin --profile <名> add "github:liao-zh/dsh-acp-adapter#<40位完整SHA>"`
+  - `--profile` 必须紧跟 `plugin` 之后（`dsh/args` 规定启动器 flag 在前，否则被当成内层参数）。
+  - 用 **40 位完整 SHA**，不要用分支名：只有完整 SHA 才让 `BundleInfo.update` 识别为 `git` 更新源。
+  - 装的是 `release` 分支的产物；`main` 无 `lib/`，装它会因缺少入口而加载失败。
 - **设置不用搬**：ACP 配置在 profile 的 `cordis.patch.yml`，不在插件目录。
 - **状态不用搬**：`~/.dsh/dsh-acp` 按 sessionId 记录，与插件版本、安装方式无关。
 - 换安装方式时**不要改包名**，否则 profile 里的配置段需要跟着改名。
+
+## 更新误报：dshmarket 的「有新提交（未发版）」
+
+`dshmarket` 插件（非 DSH 官方）会在插件页提示「有新提交（未发版）<sha>」，那个 sha 指的是
+**fork 的 `main` 分支 HEAD**（= 上游镜像，不含 `lib/`）。
+
+- **不要点这个更新**：装 `main` 会因缺少 `lib/` 而加载失败，且是降级回 0.2.1-rc.4.1。
+- 该提示自带说明「市场只安装正式版本，不会自动装这些提交」，**忽略即可**。
+- 想根治可把 fork 默认分支改成 `release`，但要先确认 dshmarket 比较的是默认分支而非安装 spec 所在分支。
+
+## 切回上游
+
+上游修好 0.2.2 兼容后：
+
+1. profile 的 `dependencies` 把 `github:...` 改回 `"<上游版本号>"`（如 `0.2.3-rc.1.1`）。
+2. `cordis.patch.yml` **不用改**：按 `name` 匹配，同名即复用。
+3. 重新 `dsh plugin add` / `pnpm install`，完全退出 DSH 重启。
+4. 本地 fork 可留在 `custom` 分支，随时可切回对比。

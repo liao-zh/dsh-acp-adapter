@@ -70,7 +70,10 @@ function must(file: string, args: readonly string[]): string {
  * @param args - arguments.
  */
 function visible(file: string, args: readonly string[]): void {
-  const settled = spawnSync(file, args, { cwd: root, stdio: 'inherit' })
+  // Windows resolves pnpm through a .cmd shim, which needs a shell; the arguments
+  // here are fixed script names, so no caller input reaches the command line.
+  const shell = process.platform === 'win32'
+  const settled = spawnSync(file, args, { cwd: root, stdio: 'inherit', shell })
   if ((settled.status ?? 1) !== 0) {
     console.error(`[sync-release] FAIL: ${file} ${args.join(' ')} exited ${settled.status ?? 1}`)
     process.exit(1)

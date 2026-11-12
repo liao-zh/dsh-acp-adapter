@@ -1,3 +1,5 @@
+> 本仓库为个人 fork：本地改动在 `custom` 分支，维护规则见 `notes/README.md`。
+
 # Working on the ACP adapter
 
 This repository adapts external ACP Agents to DSH. DSH owns native input admission, tools and presentation; each Agent owns its model loop and native tools. Read [native reuse](docs/native-reuse.md) before changing that division. The compatibility target is the exact published DSH version in `package.json`; `reference/deepseek-harness` is a source scaffold, not a replacement dependency.

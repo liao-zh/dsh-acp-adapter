@@ -62,6 +62,13 @@ git rebase main
 git switch release && git switch custom && pnpm build
 ```
 
+> **2026-11-14 实测：这个 `finally` 没兜住。** 跑 `pnpm run sync:release` 成功后
+> （`release → 44e60fc`、tag `v0.2.2-rc.3.1` 已建），切回 `custom` 时 `lib/index.js`
+> **仍然不存在**，需要手动 `pnpm build` 才恢复。判断顺序：发版后**先查一次**
+> `Test-Path lib/index.js`，缺了就立刻 `pnpm build`；不要以为「脚本说有 finally 就没事」。
+> （`check:fork-state` 的 `runtime dependencies installed` 那项查的是 `dependencies`，
+> 不查 `lib/`，所以它报 OK 也不能证明入口还在。）
+
 `--allow-dirty` 可跳过工作区检查，仅供脚本自身开发时 dry-run。
 
 > 脚本用 `node` 直接跑即可（Node 26 原生剥离 TS 类型）；`pnpm run` 需要能写

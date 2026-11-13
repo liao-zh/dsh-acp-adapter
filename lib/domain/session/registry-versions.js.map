@@ -1,0 +1,1 @@
+{"version":3,"file":"registry-versions.js","sourceRoot":"","sources":["../../../src/domain/session/registry-versions.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;GAUG;AAEH,OAAO,eAAe,MAAM,2CAA2C,CAAC,OAAO,IAAI,EAAE,MAAM,EAAE,CAAA;AAM7F,MAAM,iBAAiB,GAAI,eAAoF,CAAC,OAAO,CAAA;AAEvH;;;GAGG;AACH,MAAM,UAAU,iBAAiB,CAAC,eAAuB;IACvD,OAAO,iBAAiB,CAAC,eAAe,CAAC,EAAE,OAAO,CAAA;AACpD,CAAC"}

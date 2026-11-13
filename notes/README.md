@@ -50,7 +50,7 @@ git rebase main
 
 | 命令 | 用途 | 退出码 |
 |---|---|---|
-| `pnpm run check:fork-state [-- --host 0.2.2-rc.2]` | **开工体检**：当前分支、工作区、上游落后、`release` 是否含 `lib/`、版本号与 tag 是否一致、`engines.dsh` 是否匹配运行版、依赖是否装齐 | 0 全通过 / 1 有失败 |
+| `pnpm run check:fork-state [-- --host 0.2.2-rc.3]` | **开工体检**：当前分支、工作区、上游落后、`release` 是否含 `lib/`、版本号与 tag 是否一致、`engines.dsh` 是否匹配运行版、依赖是否装齐 | 0 全通过 / 1 有失败 |
 | `pnpm run check:release-freshness` | **发版前自查**：`custom` 有没有改过产出物料的路径（`src`、`package.json`、`pnpm-lock.yaml`、`tsconfig.json`、`tsdown.config.ts`、`scripts`）却没重建 `release` | 0 最新 / 1 需重建 / 2 分支或产物缺失 |
 | `pnpm run sync:release [-- --push]` | **发版**：构建 → 单提交快照（含 `lib/`）→ 移动 `release` → 打 tag。默认只做本地 | 0 成功 / 1 失败 |
 
@@ -175,16 +175,16 @@ Git 安装要克隆整个仓库（183 个提交、约 13 MB），国内经 SSH �
 # 1. 本地打包（必须在 release 分支，那里有 lib/）
 cd dsh-acp-adapter
 git switch release
-pnpm pack          # 生成 zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz
+pnpm pack          # 生成 zaimokuza-dsh-acp-adapter-0.2.2-rc.3.1.tgz
 git switch custom
 ```
 
 ```bash
 # 2. 把 tgz 传到远程（WSL 可直接读 /mnt/c/...，或用 scp）
-cp /mnt/c/path/to/zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz ~/
+cp /mnt/c/path/to/zaimokuza-dsh-acp-adapter-0.2.2-rc.3.1.tgz ~/
 
 # 3. 装
-dsh plugin --profile <名> add ~/zaimokuza-dsh-acp-adapter-0.2.2-rc.2.1.tgz
+dsh plugin --profile <名> add ~/zaimokuza-dsh-acp-adapter-0.2.2-rc.3.1.tgz
 ```
 
 - **优点**：秒级完成、不依赖网络、产物与本地验证的完全一致。

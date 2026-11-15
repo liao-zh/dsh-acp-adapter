@@ -94,7 +94,9 @@ const baseBranch = values.base
 const remote = values.remote
 
 const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version
-const tag = `v${version}`
+// Fork tags are prefixed so they never collide with upstream release tags of the
+// same version (`git fetch --tags` rejects the clobber, breaking `fetch --all`).
+const tag = `fork-v${version}`
 const initialBranch = run('git', ['branch', '--show-current']).output
 const snapshotBranch = `release-snapshot-${process.pid}`
 

@@ -142,9 +142,11 @@ const releaseVersion = releaseManifest === undefined
     })()
 check(releaseVersion === version, 'release version matches workspace', `workspace ${String(version)}, release ${String(releaseVersion)}`)
 
-const tags = tryGit(['tag', '--sort=-v:refname'])?.split('\n').filter((line) => line !== '') ?? []
+// Only this fork's own tags count here; upstream publishes `v<version>` tags for
+// the same versions and must not be mistaken for a local release.
+const tags = tryGit(['tag', '--list', 'fork-v*', '--sort=-v:refname'])?.split('\n').filter((line) => line !== '') ?? []
 const latestTag = tags[0]
-check(latestTag === `v${String(version)}`, 'latest tag matches version', latestTag === undefined ? 'no tags' : latestTag)
+check(latestTag === `fork-v${String(version)}`, 'latest tag matches version', latestTag === undefined ? 'no tags' : latestTag)
 
 // -- host alignment ----------------------------------------------------------
 if (enginesDsh === undefined) {

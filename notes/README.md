@@ -21,12 +21,54 @@
 - 上游 **HTTPS 走 schannel 会报 `SEC_E_NO_CREDENTIALS`**，必须用 SSH 地址
 - `remote.pushDefault = origin`；`main` 跟踪 `upstream/main` 但推 `origin`
 
+### ⚠️ 本地 tag 一律加 `fork-` 前缀
+
+上游也用 `v<version>` 给同名版本打 tag（如 `v0.2.2-rc.2.1`）。fork 早期用 `sync:release`
+直接打 `v${version}`，与上游撞名后：
+
+- `git fetch --all --tags` 报 `! [rejected] ... (would clobber existing tag)`，**exit=1，且该 remote 其余 ref 也不再更新**；
+- `git fetch upstream`（不带 `--tags`）反而**静默通过**，本地那条 tag 却仍指向 fork 的提交 —— 最容易误判「上游没发版」。
+
+**现状**：本地 fork 的 3 个发版 tag 已改名为 `fork-v0.2.2-rc.2.1` / `fork-v0.2.2-rc.2.2` /
+`fork-v0.2.2-rc.3.1`（提交、消息、tagger 时间保持不变），原名的 3 个 tag 已从本地与 `origin` 删除。
+`v0.2.2-rc.2.1` 现在指向**上游**的 `0aef1e5`。`sync:release` 与 `check:fork-state` 已同步改为只认 `fork-v*`。
+
+**查版本一律以上游为准**，别看本地 tag：
+
+```sh
+git ls-remote --tags upstream | Select-String "0\.2\.2"
+```
+
+
 ## 同步上游
 
 ```sh
 git fetch --all
 git switch main && git merge --ff-only upstream/main && git switch custom
 git rebase main
+```
+
+> **`upstream/main` 是 0.2.1 线，不是 0.2.2 线。** 0.2.2 的 rc.1.1 / rc.1.2 / rc.2.1 全在
+> `upstream/0.2.2-alpha`（`28ccc67..0.2.2-alpha` 共 44 个提交，均未进 `main`）。
+> 上面这套 `merge --ff-only upstream/main` 只用于跟进 0.2.1 的修补；要看 0.2.2 的进展：
+
+```sh
+git fetch --all --tags
+git log --oneline upstream/0.2.2-alpha -10
+```
+
+**tag 安全网**：`fetch --all` 默认只拉**本地尚不存在**的 tag，遇到同名不同指向的会
+`rejected (would clobber existing tag)` 并让整个 remote 的 fetch 失败（exit=1）。
+本 fork 的发版 tag 已全部改成 `fork-v*`，与上游 `v*` 不再重叠，因此正常 `fetch --all` 应当 **exit=0**。
+若哪天又看到 `would clobber`，说明**又有 fork tag 用了 `v<version>` 原名** —— 按「远程」一节的规则改名，
+不要用 `--prune-tags`（那会强行覆盖）或 `git tag -d` 直接删（那会丢发版记录）。
+
+只有确实不想让任何 tag 进本地时，才临时用：
+
+```sh
+git fetch --no-tags upstream
+# 需要某个上游 tag 时单独取到独立命名空间，不污染 git tag：
+git fetch --no-tags upstream refs/tags/<tag>:refs/upstream-tags/<tag>
 ```
 
 ## 升级 DSH 目标版本
@@ -200,13 +242,33 @@ dsh plugin --profile <名> add ~/zaimokuza-dsh-acp-adapter-0.2.2-rc.3.1.tgz
 
 ## 切回上游
 
-上游修好 0.2.2 兼容后：
+上游修好 0.2.2 兼容后（**判据：上游 tag 的 `engines.dsh` 等于本机运行版**，例如 `0.2.2-rc.3`）：
 
 > **切回前先复查一个 fork 侧记录的 bug**：`notes/2026-11-15-跨后端切换弹窗无法关闭.md`。
 > 现象是源 provider 消失后跨后端切换弹窗无法关闭、重启复现。按那份笔记第四节的清单，
 > 在**上游版本**上判一次是否已修：已修就直接切回，未修再提 issue（草稿在那份笔记的第八节）。
 
-1. profile 的 `dependencies` 把 `github:...` 改回 `"<上游版本号>"`（如 `0.2.3-rc.1.1`）。
+**查上游到哪一版了**（不要看本地 tag，本地是 fork 的 `fork-*`）：
+
+```sh
+git fetch --all --tags
+git log --oneline upstream/0.2.2-alpha -10     # 0.2.2 线在 0.2.2-alpha，不在 main
+git show upstream/0.2.2-alpha:package.json | Select-String '"dsh":'
+```
+
+> 2026-11-15 实况：上游最新 `v0.2.2-rc.2.1`（npm `next` 渠道已发），目标宿主仍是 `0.2.2-rc.2`；
+> 本机跑 `0.2.2-rc.3`，因此**还不能切**。上游这波（11-13 → 11-14，44 个提交）已自行完成 0.2.2 迁移，
+> 并把 Team 成员设置并回原生子代理目录 —— 我们在「已知遗留」里记的那条降级会被覆盖。
+
+1. profile 的 `dependencies` 把 `link:`（本机）或 `github:...`（远程）改回 `"<上游版本号>"`，
+   如 `0.2.3-rc.1.1`。⚠️ **本机 desktop profile 现在是 `link:` 指向本 fork，必须换掉**，
+   否则装了上游版也不生效。
 2. `cordis.patch.yml` **不用改**：按 `name` 匹配，同名即复用。
 3. 重新 `dsh plugin add` / `pnpm install`，完全退出 DSH 重启。
 4. 本地 fork 可留在 `custom` 分支，随时可切回对比。
+
+**切回即退役，不移植**：上游的 0.2.2 迁移与本 fork 是**两条平行实现**（`git cherry` 显示 fork 的
+11 个提交上游一个都没有；src 目录上游独有 29 个文件、fork 独有 3 个）。所以不要试图拿 fork 的补丁
+rebase 到上游 —— 直接整体用上游，fork 侧唯一要带走的是这份 `notes/` 的判断经验。
+切换后 `sync:release` / `check:fork-state` / `check:release-freshness` 三个脚本随 fork 一起作废。
+

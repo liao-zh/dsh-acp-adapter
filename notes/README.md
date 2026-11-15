@@ -202,6 +202,10 @@ dsh plugin --profile <名> add ~/zaimokuza-dsh-acp-adapter-0.2.2-rc.3.1.tgz
 
 上游修好 0.2.2 兼容后：
 
+> **切回前先复查一个 fork 侧记录的 bug**：`notes/2026-11-15-跨后端切换弹窗无法关闭.md`。
+> 现象是源 provider 消失后跨后端切换弹窗无法关闭、重启复现。按那份笔记第四节的清单，
+> 在**上游版本**上判一次是否已修：已修就直接切回，未修再提 issue（草稿在那份笔记的第八节）。
+
 1. profile 的 `dependencies` 把 `github:...` 改回 `"<上游版本号>"`（如 `0.2.3-rc.1.1`）。
 2. `cordis.patch.yml` **不用改**：按 `name` 匹配，同名即复用。
 3. 重新 `dsh plugin add` / `pnpm install`，完全退出 DSH 重启。

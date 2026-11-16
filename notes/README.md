@@ -197,6 +197,16 @@ DSH 0.2.2 删除了 Agent Teams 的 roster（`tryMembership` / `listMembers` / `
 
 ## 安装与使用
 
+> **2026-11-16：本 fork 已退役，两处都换成上游 npm 版 `0.2.2-rc.3.1`**（本机 desktop 与远端 web）。
+> 上游 rc.3.1 的 `engines.dsh = 0.2.2-rc.3` 与运行版一致，14 个 `client.inject` 包在运行版里全都在。
+> 下面是历史用法，仅切回 fork 时才需要。
+>
+> ⚠️ **换安装方式时`先删 junction`，别先让安装失败**：从 `link:` 改 registry 版时，
+> 若直接去 GUI 安装，pnpm 会先撞 `ERR_PNPM_EPERM`（界面显示「没有写入权限」），
+> 而**失败那一步已经在搬 link 的源目录**，实测把本仓库的 `.git` 元数据与 `.agents/` 删掉了。
+> 正确顺序：`cmd /c rmdir "<profile>\node_modules\@zaimokuza\dsh-acp-adapter"` → 再装。
+> 完整坑与 `.git` 原地重建法见工作区 `notes/2026-10-16-经验-跨插件通用坑.md` 的 **E-19**。
+
 - **本机**：profile 的 `package.json` 用 `link:` 指向本仓库；改完 `pnpm build` 后**完全退出 DSH 再启动**（ESM 模块缓存不热重载）。
 - **远程**：`dsh plugin --profile <名> add "github:liao-zh/dsh-acp-adapter#<40位完整SHA>"`
   - `--profile` 必须紧跟 `plugin` 之后（`dsh/args` 规定启动器 flag 在前，否则被当成内层参数）。

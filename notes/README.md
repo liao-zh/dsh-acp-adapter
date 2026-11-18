@@ -99,6 +99,44 @@ git fetch --no-tags upstream refs/tags/<tag>:refs/upstream-tags/<tag>
 不维护「版本敏感点清单」：51 个宿主包、221 处 import、19 个服务、64 处 `ctx.get`，
 全量列表的维护成本高于收益，而 typecheck 已覆盖 call-site 这一类。
 
+## 升级 DSH：npm 版靠 compatibility.json 放行（2026-11-18 起）
+
+上游 npm 版的 `engines.dsh` 写的是**精确值**（如 `0.2.2-rc.3`），不是范围。DSH 一升级就必然不满足，
+profile 加载时该 bundle 直接 `throw` → **整个补丁层被跳过**（`packages/boot/app-boot/src/profile.ts:699`），
+症状是插件静默消失、没有报错弹窗。fork 已退役、改不了清单 ⇒ 只能加 profile 豁免。
+
+文件（不存在就新建）：
+
+```
+C:\Users\liaoz\.dsh\profiles\desktop\compatibility.json
+```
+
+内容：
+
+```json
+{
+  "@zaimokuza/dsh-acp-adapter@0.2.2-rc.3.1": ["0.2.2-rc.5"]
+}
+```
+
+步骤：
+
+1. 确认已装的 acp 版本：
+   `(Get-Content "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\@zaimokuza\dsh-acp-adapter\package.json" -Raw | ConvertFrom-Json).version`
+2. 把**新的 DSH 版本**加进该键的数组（已有条目就追加，不要新建一个错的键）。
+3. **完全退出 DSH** → 升级 → 启动。bundle 层只在启动/安装时过闸。
+4. 启动后确认 acp 真的在：插件页可见、会话里能用。可疑时用 `plugin_manager` 的
+   `list_version_exemptions` 看文件是否被接受（有 warning = 格式被拒、没生效）。
+
+四条坑：
+
+- 键必须是**精确 `包名@版本`**。acp 一升级，旧键失效，要按新版本再加一条。
+- 值必须是**精确版本数组**；范围、`^`、空格会让整条记录被忽略并留 warning。
+- 官方写入器（插件管理页 / `plugin_manager` 的 `set_version_exemption`）只允许给**正在运行**的版本授权
+  （`app-boot/src/profile-compatibility.ts:121`：`Cannot approve DSH X: this application runs DSH Y`）
+  ⇒ 「升级前先写好」只能手写 JSON；升级后也可以走官方路径补。
+- 豁免只放行**版本闸**，不是兼容性证明：仍要对照下面「已炸过的 seam」表，升级后真机跑一遍。
+
 ## 日常脚本
 
 三个只读写本地状态的维护脚本（除 `--push` 外都不动远端）：
@@ -206,7 +244,8 @@ DSH 0.2.2 删除了 Agent Teams 的 roster（`tryMembership` / `listMembers` / `
 
 - 不改 `CHANGELOG.md`、`docs/`：上游最近 10 次提交里改了 10 次，加了必然冲突。
 - 不跑上游 `.agents/skills/adapter-release`，不发 npm 包。
-- 不写 `~/.dsh/profiles/*/compatibility.json` 豁免：fork 把 `engines.dsh` 改对即可，不绕门禁。
+- ~~不写 `~/.dsh/profiles/*/compatibility.json` 豁免~~ —— 这条只在 **fork 期**成立（改 `engines.dsh` 即可，不绕门禁）。
+  **2026-11-18 起用上游 npm 版，DSH 升级必须写豁免**，步骤见上文「升级 DSH：npm 版靠 compatibility.json 放行」。
 
 ## 安装与使用
 

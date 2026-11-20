@@ -257,7 +257,7 @@ DSH 0.2.2 删除了 Agent Teams 的 roster（`tryMembership` / `listMembers` / `
 > 若直接去 GUI 安装，pnpm 会先撞 `ERR_PNPM_EPERM`（界面显示「没有写入权限」），
 > 而**失败那一步已经在搬 link 的源目录**，实测把本仓库的 `.git` 元数据与 `.agents/` 删掉了。
 > 正确顺序：`cmd /c rmdir "<profile>\node_modules\@zaimokuza\dsh-acp-adapter"` → 再装。
-> 完整坑与 `.git` 原地重建法见工作区 `notes/2026-10-16-经验-跨插件通用坑.md` 的 **E-19**。
+> 完整坑与 `.git` 原地重建法见本仓库 [`改动清单.md`](改动清单.md) 里的事故记录与善后步骤。
 
 - **本机**：profile 的 `package.json` 用 `link:` 指向本仓库；改完 `pnpm build` 后**完全退出 DSH 再启动**（ESM 模块缓存不热重载）。
 - **远程**：`dsh plugin --profile <名> add "github:liao-zh/dsh-acp-adapter#<40位完整SHA>"`
